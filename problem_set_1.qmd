@@ -1,0 +1,392 @@
+---
+title: "Problem Set 1"
+subtitle: "Data Exploration and Descriptive Statistics"
+format:
+  html:
+    toc: true
+    embed-resources: true
+date: "2025-04-09"
+---
+
+```{r}
+#| label: setup
+#| include: false
+
+# Loading tidyverse
+library(tidyverse)
+```
+
+## Instructions
+
+This problem set asks you to do two kind of work–do some of the dataset preparation for logistic regression later; and analyze differently distributed data. For submitting this problem set, please submit both: The Quarto document (.qmd file) and a rendered HTML. Make sure to record text answers in markdown, not as code comments or print statements!
+
+Working together is useful but you **must submit your own work**. Discussing the solutions and problems with your classmates is encouraged, but do not copy-paste their solution! Be sure to list all your collaborators (i.e. classmates) in the section below.
+
+Comment and explain your results as needed. Some simple questions, e.g. “how many rows does the dataset contain” do not need any explanations. Others, e.g. “Create and compare three histograms”, require explanatory text!
+
+Ensure your submission is readable. Depending of the complexity of your code and the choice of variable names you may need more or less explanations. For instance, if you are asked to find the largest income, then:
+
+`print(largestIncome)`
+
+needs no additional explanations. But if you choose to call the variable “maxy”, then you may need to add a comment:
+
+`print(maxy) # 'maxy' is the largest income`
+
+Data Science requires both technical expertise and contextual knowledge. Some of questions may link to historical events, or geography - we do NOT expect you to know everything, you will likely need to use Google or other external resources for some questions!
+**Remember: your task is to convince us that you understand, not just to produce correct results!**
+
+#### Collaborators
+
+1.  Amartya Chaube
+2.  collaborator 2
+3.  collaborator 3
+
+## Cleaning Election Data
+
+For this section, we will be working with results from U.S. presidential elections. Your task will be to create a dataframe that includes certain county data and the winner– “1” or “0” depending on whether the democratic or republican candidate won the election for a given county. You will also need population density, education level, income, migration rate, and geography (the census region).
+
+#### 1. Loading the data
+First, load in the ***us-elections_2000-2024.csv.bz2*** data from Canvas and answer the following:
+
+a.  What are the dimensions of our data (i.e. how many rows and columns)?
+b.  Print out the first 5 rows of the dataset. What does a single row in this dataset represent?
+c.  Print out the number of null/missing values are there in each column.
+
+```{r}
+
+# Load the election data
+elections <- read_csv("us-elections_2000-2024.csv.bz2")
+
+# a. Dimensions of the data
+dimensions <- dim(elections)
+print(paste("The dataset has", dimensions[1], "rows and", dimensions[2], "columns."))
+
+# Print the answer to part a
+cat("a. The dimensions of our data are:", dimensions[1], "rows and", dimensions[2], "columns.\n")
+
+
+# b. First 5 rows
+head(elections, 5)
+
+# Print the answer to part b
+cat("b. Each row represents election results for a specific candidate in a specific county during a specific election year. It includes geographic identifiers (FIPS, state, county), candidate information (name, party), votes received, and various demographic and socioeconomic variables for that county.\n")
+
+
+# c. Count missing values in each column
+missing_values <- colSums(is.na(elections))
+
+# Print the answer to part c
+cat("c. Number of missing values in each column:\n")
+print(missing_values)
+
+
+```
+
+#### 2. Addressing missing values
+We're only going to be working with the 2024 election data. However, some important information for 2024 is missing. First, let’s check what this missing data looks like and how we can fix it.
+
+a.  Print rows 7285 to 7298. For simplicity, only include the columns `FIPS`, `county`, `year`, `income`, and `population`.
+b.  What does this sample tell you about distinguishing unique counties using the `county` column vs. the `FIPS` column?
+*Hint: We will want to use one of these columns in the next step. Which one is going to allow us to correctly group counties?*
+
+    Based on the sample data, using the FIPS column is better for distinguishing unique counties because FIPS codes are standardized unique identifiers for counties across the United States. The county name alone isn't sufficient as there are counties with identical names in different states (like Washington County existing in multiple states). FIPS codes ensure we correctly group the same county across different years.
+    
+c.  You should notice that `income` and `population` are missing for 2024 in `Kauai County`. Use the `fill` function to fill in nulls for both columns, but make sure you ONLY fill nulls with values from the same county. E.g., fill 2024 Kauai County with 2020 Kauai County data, but do NOT fill Maui County with Kauai County data.
+*Hint: Check the documentation for for tidyr::fill(). You should `arrange` and `group_by` before using `fill`.*
+d.  Print out the same rows as you did in a). Does it look as expected? How many nulls are still in the `income` column in the entire dataset?
+*Hint: If you did everything correctly, there should still be 748 nulls in the `income` column*
+
+```{r}
+
+# a. Print rows 7285 to 7298 with selected columns
+election_72 <- elections[7285:7298, c("FIPS","county","year","income", "population")]
+print("Selected rows with FIPS, county, year, income, and population:")
+print(election_72)
+
+# b. Examining FIPS vs county columns
+# (This is for your analysis after seeing the output)
+
+# c. Fill in nulls for income and population within the same county
+elections_filled <- elections %>%
+  arrange(FIPS, year) %>%
+  group_by(FIPS) %>%
+  fill(income, population, .direction = "down") %>%
+  ungroup()
+
+# d. Check the same rows after filling
+eFilled_72 <- elections_filled[7285:7298, c("FIPS","county","year","income", "population")]
+print("Selected rows after filling missing values:")
+print(eFilled_72)
+
+# Count remaining nulls in income column
+sum(is.na(elections_filled))
+
+```
+
+#### 3. Feature engineering
+
+Now we want to select relevant data for use in a future assignment. In the later problem set, your task will be to analyze what kind of county-specific factors are related to democrats/republicans winning in that county.
+
+a.  First, create a new dataframe that only contains 2024 data. We've already filled in nulls, so we no longer need the other years of data.
+b.  Create a new column, `dem_won` contains a binary variable for each county: whether or not a democrat won in that county in 2024 (1 if a democrat won the county, 0 if not).
+*Hint: You can build this new variable in several ways. A simple approach is to group by counties, determine the candidate with the most votes, and then mutate a new column with that information.*
+c.  Create another new column `pop_density` for each county. This should contain the population density, which can be calculated by dividing the population (`population`) by land area (`LND010200D`).
+d.  Print the number of missing/null values in the columns you've created (`dem_won` and `pop_density`). Remove rows with missing information in these columns.
+e.  Subset your data to `FIPS`, `county`, `dem_won`, `pop_density`, and `income`. How many rows are in your final dataset? 
+
+```{r}
+
+# a. Create a new dataframe with only 2024 data
+elections_2024 <- elections_filled %>% 
+  filter(year == 2024)
+
+print("Created a new dataframe with only 2024 data")
+
+# b. Create a binary column for whether a democrat won in each county
+county_results_2024 <- elections_2024 %>%
+  # Keep only Democrat and Republican candidates
+  filter(party %in% c("DEMOCRAT", "REPUBLICAN")) %>%
+  # Group by county (using FIPS as the identifier)
+  group_by(FIPS) %>%
+  # Calculate total votes and vote share for each candidate
+  mutate(total_votes = sum(candidatevotes, na.rm = TRUE),
+         vote_share = candidatevotes / total_votes) %>%
+  # For each county, keep only the row with the winner
+  slice_max(vote_share, n = 1) %>%
+  # Create the dem_won column (1 if Democrat won, 0 if Republican won)
+  mutate(dem_won = ifelse(party == "DEMOCRAT", 1, 0)) %>%
+  ungroup()
+
+print("Created dem_won column to indicate if a Democrat won in each county")
+
+# c. Create population density column
+county_features <- county_results_2024 %>%
+  mutate(pop_density = population / LND010200D)
+
+print("Created pop_density column by dividing population by land area")
+
+# d. Check for missing values in the new columns
+dem_won_missing <- sum(is.na(county_features$dem_won))
+pop_density_missing <- sum(is.na(county_features$pop_density))
+
+print(paste("d. Missing values in dem_won:", dem_won_missing))
+print(paste("   Missing values in pop_density:", pop_density_missing))
+
+# Remove rows with missing information in these columns
+county_features_clean <- county_features %>%
+  filter(!is.na(dem_won) & !is.na(pop_density))
+
+print(paste("After removing rows with missing values in these columns, the dataframe has", 
+    nrow(county_features_clean), "rows"))
+
+# e. Subset to the requested columns
+final_dataset <- county_features_clean %>%
+  select(FIPS, county, dem_won, pop_density, income)
+
+print(paste("Final dataset with columns FIPS, county, dem_won, pop_density, and income has", 
+    nrow(final_dataset), "rows"))
+
+# Display the first few rows of the final dataset
+print("First few rows of the final dataset:")
+print(head(final_dataset))
+```
+
+## Differently Distributed Data
+
+In this section we'll take a look at the distributions of a couple different kinds of data.
+
+#### 4. Height measurments
+Download and read in the ***fatherson.csv.bz2*** data from Canvas and answer the following:
+
+a.  Looking just at the `fheight` column, how many observations do we have? How many null/missing values? How many unreasonable or invalid values?
+*Note: The `fheight` column contains the heights of fathers in this dataset, measured in centimeters.*
+b.  Compute the mean, median, and standard deviation of the `fheight` column. Just by looking at these values, do you believe our data is spread out or skewed? Why or why not?
+c.  Plot a histogram of this data. Add vertical lines to indicate the mean and median.
+d.  What does the distribution of this data tell you about height as a natural phenomena?
+
+```{r}
+
+# Load the data
+fatherson <- read_csv("fatherson.csv.bz2")
+
+# a. Examine the fheight column
+num_observations <- length(fatherson$fheight)
+num_missing <- sum(is.na(fatherson$fheight))
+# Define reasonable height range for adult males (e.g., 140-220 cm)
+num_unreasonable <- sum(fatherson$fheight < 140 | fatherson$fheight > 220, na.rm = TRUE)
+
+print(paste("Number of observations in fheight column:", num_observations))
+print(paste("Number of missing values in fheight column:", num_missing))
+print(paste("Number of unreasonable values in fheight column:", num_unreasonable))
+
+# b. Calculate statistics
+mean_height <- mean(fatherson$fheight, na.rm = TRUE)
+median_height <- median(fatherson$fheight, na.rm = TRUE)
+sd_height <- sd(fatherson$fheight, na.rm = TRUE)
+
+print(paste("Mean father height:", round(mean_height, 2), "cm"))
+print(paste("Median father height:", round(median_height, 2), "cm"))
+print(paste("Standard deviation of father height:", round(sd_height, 2), "cm"))
+
+# c. Plot histogram with mean and median lines
+ggplot(fatherson, aes(x = fheight)) +
+  geom_histogram(binwidth = 2, fill = "steelblue", color = "black", alpha = 0.7) +
+  geom_vline(aes(xintercept = mean_height), color = "red", linetype = "dashed", linewidth = 1) +
+  geom_vline(aes(xintercept = median_height), color = "green", linetype = "dashed", linewidth = 1) +
+  labs(title = "Distribution of Father Heights",
+       x = "Height (cm)",
+       y = "Frequency") +
+  theme_minimal() +
+  annotate("text", x = mean_height + 5, y = 200, label = paste("Mean =", round(mean_height, 1)), color = "red") +
+  annotate("text", x = median_height - 5, y = 150, label = paste("Median =", round(median_height, 1)), color = "green")
+
+```
+
+#### 5. Financial transactions
+Download and read in the ***account-transactions.csv.bz2*** data from Canvas and answer the following:
+
+a.  Looking just at the `amount` column, how many observations do we have? How many null/missing values? How many unreasonable or invalid values?
+*Note: The `amount` column contains transaction amounts in US dollars.*
+b.  Compute the mean, median, and standard deviation of the `amount` column. Just by looking at these values, do you believe our data is spread out or skewed? Why or why not?
+c.  Plot a histogram of this data. Add vertical lines to indicate the mean and median.
+d.  What does the distribution of this data tell you about transaction amounts?
+
+```{r}
+
+# Load the financial transactions data
+account_transactions <- read_csv("account-transactions.csv.bz2")
+
+# a. Examine the amount column
+num_observations_amount <- length(account_transactions$amount)
+num_missing_amount <- sum(is.na(account_transactions$amount))
+# Consider transactions outside a reasonable range (e.g., > $100,000) as potentially unreasonable
+# This threshold would depend on the context of the transactions
+num_unreasonable_amount <- sum(account_transactions$amount < -100000 | account_transactions$amount > 100000, na.rm = TRUE)
+
+print(paste("Number of observations in amount column:", num_observations_amount))
+print(paste("Number of missing values in amount column:", num_missing_amount))
+print(paste("Number of potentially unreasonable values in amount column:", num_unreasonable_amount))
+
+# b. Calculate statistics
+mean_amount <- mean(account_transactions$amount, na.rm = TRUE)
+median_amount <- median(account_transactions$amount, na.rm = TRUE)
+sd_amount <- sd(account_transactions$amount, na.rm = TRUE)
+
+print(paste("Mean transaction amount: $", round(mean_amount, 2)))
+print(paste("Median transaction amount: $", round(median_amount, 2)))
+print(paste("Standard deviation of transaction amount: $", round(sd_amount, 2)))
+
+# c. Plot histogram with mean and median lines
+ggplot(account_transactions, aes(x = amount)) +
+  geom_histogram(binwidth = 50, fill = "darkgreen", color = "black", alpha = 0.7) +
+  geom_vline(aes(xintercept = mean_amount), color = "red", linetype = "dashed", linewidth = 1) +
+  geom_vline(aes(xintercept = median_amount), color = "blue", linetype = "dashed", linewidth = 1) +
+  labs(title = "Distribution of Transaction Amounts",
+       x = "Amount ($)",
+       y = "Frequency") +
+  theme_minimal() +
+  annotate("text", x = mean_amount + 200, y = max(table(cut(account_transactions$amount, breaks = 50)))/2, 
+           label = paste("Mean =", round(mean_amount, 2)), color = "red") +
+  annotate("text", x = median_amount - 200, y = max(table(cut(account_transactions$amount, breaks = 50)))/3, 
+           label = paste("Median =", round(median_amount, 2)), color = "blue")
+
+
+```
+
+## Random Variables
+
+#### 6. Sampling from data
+Download and read in the ***titanic.csv.bz2*** data from Canvas. We will be treating the `fare` column as if it is a random variable or population we want to sample. For our purposes, let's assume that all values in `fare` represent the true population and our samples will represent a sampling of that population.
+
+a.  Sample 10 values from `fare` 10 times using `sample()` and take the mean of each sample. **BE SURE TO REMOVE NULL/MISSING VALUES**
+*Hint: A for-loop is the most intuitive way to do this, but there are several methods.*
+b.  Calculate the overall sampled population mean by taking the mean of the samples you collected. How does it compare to the actual population mean (i.e. the mean of the entire column)
+c.  Calculate the standard deviation of sample means (i.e. standard error).
+d.  Plot your sample means as a histogram.
+e.  Now, increase your number of samples to 1000 and repeat b), c) and d). What happens to your sampled population mean, standard error, and histogram distribution when you increase the number of samples?
+
+```{r}
+
+# Load the Titanic data
+titanic <- read_csv("titanic.csv.bz2")
+
+# a. Sample 10 values from fare 10 times and calculate means
+# First, remove missing values from the fare column
+fare_clean <- titanic$fare[!is.na(titanic$fare)]
+
+# Initialize vector to store sample means
+sample_means_10 <- numeric(10)
+
+# Generate 10 samples of size 10 and calculate their means
+set.seed(123) # For reproducibility
+for (i in 1:10) {
+  sample_i <- sample(fare_clean, 10, replace = TRUE)
+  sample_means_10[i] <- mean(sample_i)
+}
+
+print("a. Means of 10 samples (each with 10 values):")
+print(sample_means_10)
+
+# b. Calculate the sampled population mean and compare to actual population mean
+sampled_pop_mean_10 <- mean(sample_means_10)
+actual_pop_mean <- mean(fare_clean)
+
+print("b. Comparison of means:")
+print(paste("Sampled population mean (10 samples):", round(sampled_pop_mean_10, 2)))
+print(paste("Actual population mean:", round(actual_pop_mean, 2)))
+print(paste("Difference:", round(sampled_pop_mean_10 - actual_pop_mean, 2)))
+
+# c. Calculate the standard error
+standard_error_10 <- sd(sample_means_10)
+print("c. Standard error (standard deviation of sample means):")
+print(round(standard_error_10, 2))
+
+# d. Plot the sample means as a histogram
+# Create data frame for ggplot
+sample_means_df_10 <- data.frame(means = sample_means_10)
+
+# Create histogram
+ggplot(sample_means_df_10, aes(x = means)) +
+  geom_histogram(bins = 5, fill = "skyblue", color = "black") +
+  geom_vline(aes(xintercept = sampled_pop_mean_10), color = "red", linetype = "dashed", size = 1) +
+  geom_vline(aes(xintercept = actual_pop_mean), color = "blue", linetype = "dashed", size = 1) +
+  labs(title = "Histogram of 10 Sample Means (n=10)",
+       x = "Sample Mean",
+       y = "Frequency") +
+  theme_minimal() +
+  annotate("text", x = sampled_pop_mean_10 + 10, y = 3, label = "Sampled Mean", color = "red") +
+  annotate("text", x = actual_pop_mean - 10, y = 3, label = "Population Mean", color = "blue")
+
+# e. Increase to 1000 samples and repeat
+sample_means_1000 <- numeric(1000)
+
+for (i in 1:1000) {
+  sample_i <- sample(fare_clean, 10, replace = TRUE)
+  sample_means_1000[i] <- mean(sample_i)
+}
+
+# Calculate the sampled population mean
+sampled_pop_mean_1000 <- mean(sample_means_1000)
+standard_error_1000 <- sd(sample_means_1000)
+
+print("e. Results for 1000 samples:")
+print(paste("Sampled population mean (1000 samples):", round(sampled_pop_mean_1000, 2)))
+print(paste("Actual population mean:", round(actual_pop_mean, 2)))
+print(paste("Difference:", round(sampled_pop_mean_1000 - actual_pop_mean, 2)))
+print(paste("Standard error (1000 samples):", round(standard_error_1000, 2)))
+
+# Create histogram for 1000 samples
+sample_means_df_1000 <- data.frame(means = sample_means_1000)
+
+ggplot(sample_means_df_1000, aes(x = means)) +
+  geom_histogram(bins = 30, fill = "salmon", color = "black", alpha = 0.7) +
+  geom_vline(aes(xintercept = sampled_pop_mean_1000), color = "red", linetype = "dashed", size = 1) +
+  geom_vline(aes(xintercept = actual_pop_mean), color = "blue", linetype = "dashed", size = 1) +
+  labs(title = "Histogram of 1000 Sample Means (n=10)",
+       x = "Sample Mean",
+       y = "Frequency") +
+  theme_minimal() +
+  annotate("text", x = sampled_pop_mean_1000 + 10, y = 100, label = "Sampled Mean", color = "red") +
+  annotate("text", x = actual_pop_mean - 10, y = 100, label = "Population Mean", color = "blue")
+
+```
