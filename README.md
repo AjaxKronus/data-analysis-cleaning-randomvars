@@ -15,11 +15,4 @@ This repository contains the submission for Problem Set 1, focusing on data clea
   - `account-transactions.csv.bz2`
   - `titanic.csv.bz2`
 
-## Instructions
-1. Open `problem_set_1.qmd` in RStudio.
-2. Render the output using Quarto to verify the results.
-3. Submit both `.qmd` and `.html` files.
 
-## Notes
-- Review the full assignment instructions before starting.
-- Last-minute questions may not be answered within one hour of the deadline.
